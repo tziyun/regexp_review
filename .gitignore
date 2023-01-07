@@ -1,0 +1,6 @@
+# Application
+regexp_review
+
+# Autosaves
+Makefile~
+*.*~
