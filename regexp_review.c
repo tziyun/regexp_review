@@ -1,39 +1,51 @@
 
-/* #define DEBUG 1 */
+#define DEBUG 1
 
 #include <assert.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-enum atomtype {
+enum atomType {
      META,
      REG
 };
 
 struct atom {
-     enum atomtype type;
+     enum atomType type;
      int start;
      int end;
      struct atom *next;
 };
 
-struct atom *re2atomic(char *re) {
+/* Convert a regular expression to an atomic */
+/* Where an atomic is a linked list of atoms */
+struct atom *reToAtomic(char *re) {
      int start = 0;
      int end = start + 1;
 
      struct atom *first = NULL;
      struct atom *current = NULL;
 
-     char extchars[] = {'^', '$', '.', '[', '|', '(', ')', '*', '+', '?', '{'};
-     char *extchar = extchars;
-
+     /* Metacharacters recognized outside of a character class */
+     char extMeta[] = {'^', '$', '.', '[', '|', '(', ')', '*', '+', '?', '{', '\0'};
+     
+     /* Metacharacters recognized inside of a character class */
+     char intMeta[] = {'^', '-', '[', ']', '\0'};
+     
+     bool inClass = false;
      for (; *re; re++) {
-	  int ismeta = 0;
-	  
-	  for (; *extchar; extchar++) {
-	       if (*re == *extchar) {
-		    ismeta = 1;
+	  bool isMeta = false;
+
+	  char *meta = (inClass) ? intMeta : extMeta;
+	  for (; *meta; meta++) {
+	       if (*re == *meta) {
+		    isMeta = true;
+		    if (*re == '[')
+			 inClass = true;
+		    else if (*re == ']')
+			 inClass = false;
 		    break;
 	       }
 	  }
@@ -41,7 +53,7 @@ struct atom *re2atomic(char *re) {
 	  struct atom *temp = malloc(sizeof(struct atom));
 	  if (temp == NULL)
 	       return NULL;
-	  temp->type = (ismeta) ? META : REG;
+	  temp->type = (isMeta) ? META : REG;
 	  temp->start = start;
 	  temp->end = end;
 	  temp->next = NULL;
@@ -53,13 +65,13 @@ struct atom *re2atomic(char *re) {
 
 	  start++;
 	  end = start + 1;
-	  extchar = extchars;
      }
      return first;
 }
 
-void atomcmp(enum atomtype *types, int *starts, int *ends, struct atom *actual) {
-     enum atomtype *t = types;
+/* Compare an atomic against expected values */
+void atomcmp(enum atomType *types, int *starts, int *ends, struct atom *actual) {
+     enum atomType *t = types;
      int *s = starts;
      int *e = ends;
      struct atom *act = actual;
@@ -74,17 +86,25 @@ void atomcmp(enum atomtype *types, int *starts, int *ends, struct atom *actual) 
      }
 }
 
+/* Test on different regular expressions */
 void test() {
-     enum atomtype types1[] = {META, REG, REG, REG, META};
+     char* re1 = "^foo$";
+     enum atomType types1[] = {META, REG, REG, REG, META};
      int starts1[] = {0, 1, 2, 3, 4};
      int ends1[] = {1, 2, 3, 4, 5};
+     atomcmp(types1, starts1, ends1, reToAtomic(re1));
+     printf("Passed test for \"%s\"\n", re1);
 
-     atomcmp(types1, starts1, ends1, re2atomic("^foo$"));
-
-     printf("All tests passed\n");
+     char* re2 = "-[a|b]c";
+     enum atomType types2[] = {REG, META, REG, REG, REG, META, REG};
+     int starts2[] = {0, 1, 2, 3, 4, 5, 6};
+     int ends2[] = {1, 2, 3, 4, 5, 6, 7};
+     atomcmp(types2, starts2, ends2, reToAtomic(re2));
+     printf("Passed test for \"%s\"\n", re2);
 }
 
-void printatomic(struct atom *atomic) {
+/* Print the contents of an atomic */
+void printAtomic(struct atom *atomic) {
      printf("Atomic of command-line input:\n");
      struct atom *current = atomic;
      while (current) {
@@ -107,11 +127,11 @@ int main(int argc, char **argv) {
      }
 
      char *re = argv[1];
-     struct atom *atomic = re2atomic(re);
+     struct atom *atomic = reToAtomic(re);
      if (atomic == NULL)
 	  return 1;
 
 #ifdef DEBUG
-     printatomic(atomic);
+     printAtomic(atomic);
 #endif
 }
